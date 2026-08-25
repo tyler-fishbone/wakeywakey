@@ -1,0 +1,9 @@
+.DS_Store
+# Generated / machine-local state (never ship)
+desired
+max-thermal
+icons/
+layer-icon
+wakeywakey-reconcile
+local.wakeywakey.plist
+*.png
