@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.3.0"
+WAKEY_VERSION="1.4.0"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -122,7 +122,7 @@ uninstall() {
   run_sudo rm -f "$PLIST" "$RECONCILE_BIN" "$LOG"
   run_sudo pmset -a disablesleep 0 2>/dev/null || true
   cleanup_askpass
-  rm -f "$(plugin_dir)/wakeywakey.5s.sh"
+  rm -f "$(plugin_dir)/wakeywakey.15s.sh"
   rm -rf "$STATE_DIR"
   echo "✓ WakeyWakey removed; normal sleep restored."
   echo "  (SwiftBar itself was left installed — remove it from /Applications if you want.)"
@@ -185,113 +185,72 @@ printf '%s' "$WAKEY_REPO" > "$STATE_DIR/repo"
 printf '%s' "$WAKEY_BRANCH" > "$STATE_DIR/branch"
 echo "• Version: $WAKEY_VERSION (updates from github.com/$WAKEY_REPO)"
 
-# 1b) layered menu-bar icons (wake + temp badge) — SwiftBar can't stack plain emoji
-ICON_DIR="$STATE_DIR/icons"
-LAYER_BIN="$STATE_DIR/layer-icon"
-LAYER_SRC="$STATE_DIR/layer-icon.swift"
+# 1b) Monochrome template icons (Iconify SVG → black+alpha PNG).
+# One set: SwiftBar templateImage= lets macOS tint like other menu-bar icons
+# (light on dark bar, dark in light menus).
+ICON_DIR="$STATE_DIR/icons-mono"
 mkdir -p "$ICON_DIR"
-cat > "$LAYER_SRC" <<'SWIFT'
-import AppKit
-import Foundation
 
-guard CommandLine.arguments.count >= 4 else {
-  fputs("usage: layer-icon <wakeEmoji> <thermEmoji> <out.png>\n", stderr)
-  exit(2)
-}
-let wake = CommandLine.arguments[1]
-let therm = CommandLine.arguments[2]
-let outPath = CommandLine.arguments[3]
-
-let point: CGFloat = 18
-let scale: CGFloat = 2
-let px = Int(point * scale)
-
-guard let rep = NSBitmapImageRep(
-  bitmapDataPlanes: nil,
-  pixelsWide: px,
-  pixelsHigh: px,
-  bitsPerSample: 8,
-  samplesPerPixel: 4,
-  hasAlpha: true,
-  isPlanar: false,
-  colorSpaceName: .deviceRGB,
-  bytesPerRow: 0,
-  bitsPerPixel: 0
-) else {
-  fputs("bitmap failed\n", stderr)
-  exit(1)
-}
-rep.size = NSSize(width: point, height: point)
-
-NSGraphicsContext.saveGraphicsState()
-guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else {
-  fputs("context failed\n", stderr)
-  exit(1)
-}
-NSGraphicsContext.current = ctx
-ctx.imageInterpolation = .high
-
-NSColor.clear.setFill()
-NSRect(x: 0, y: 0, width: point, height: point).fill()
-
-let wakeAttrs: [NSAttributedString.Key: Any] = [
-  .font: NSFont.systemFont(ofSize: 14)
-]
-let wakeSize = (wake as NSString).size(withAttributes: wakeAttrs)
-(wake as NSString).draw(
-  at: NSPoint(x: (point - wakeSize.width) / 2 - 0.5, y: (point - wakeSize.height) / 2 + 0.5),
-  withAttributes: wakeAttrs
-)
-
-let thermAttrs: [NSAttributedString.Key: Any] = [
-  .font: NSFont.systemFont(ofSize: 10)
-]
-let thermSize = (therm as NSString).size(withAttributes: thermAttrs)
-(therm as NSString).draw(
-  at: NSPoint(x: point - thermSize.width + 0.5, y: -1.5),
-  withAttributes: thermAttrs
-)
-
-NSGraphicsContext.restoreGraphicsState()
-
-guard let png = rep.representation(using: .png, properties: [:]) else {
-  fputs("png failed\n", stderr)
-  exit(1)
-}
-try png.write(to: URL(fileURLWithPath: outPath))
-SWIFT
-
-build_layered_icons() {
-  if ! command -v swiftc >/dev/null 2>&1; then
-    echo "• Layered icons skipped (no swiftc / Xcode CLT) — menu falls back to side-by-side emoji"
-    return 0
-  fi
-  echo "• Building layered menu-bar icons…"
-  if ! swiftc -O "$LAYER_SRC" -o "$LAYER_BIN" 2>/tmp/wakeywakey-swiftc.err; then
-    echo "  ⚠ swiftc failed — menu falls back to side-by-side emoji"
-    head -5 /tmp/wakeywakey-swiftc.err 2>/dev/null || true
-    return 0
-  fi
-  # wake × Fair/Serious/Critical only (no Nominal badge)
-  rm -f "$ICON_DIR"/*-0.png 2>/dev/null || true
-  local w_emoji t_emoji key t
-  for pair in on:☕️ ac:🥚 batt:🥓; do
-    key="${pair%%:*}"
-    w_emoji="${pair#*:}"
-    for t in 1 2 3; do
-      case "$t" in
-        1) t_emoji="🌡️" ;;
-        2) t_emoji="♨️" ;;
-        3) t_emoji="🔥" ;;
-      esac
-      "$LAYER_BIN" "$w_emoji" "$t_emoji" "$ICON_DIR/${key}-${t}.png" || true
-    done
+build_mono_icons() {
+  echo "• Building monochrome template icons…"
+  local items=(
+    "lucide:egg-fried|egg"
+    "boxicons:bacon-filled|bacon"
+    "ant-design:coffee-outlined|coffee"
+    "lucide:moon|moon"
+    "bi:thermometer-low|thermo-low"
+    "bi:thermometer-half|thermo-half"
+    "bi:thermometer-high|thermo-high"
+    "mynaui:shell-solid|clam"
+    "la:laptop-solid|laptop"
+  )
+  local id name
+  for item in "${items[@]}"; do
+    id="${item%%|*}"
+    name="${item##*|}"
+    curl -fsSL "https://api.iconify.design/${id}.svg?height=64&color=black" -o "$ICON_DIR/${name}.svg" || true
   done
+
+  local rendered=0
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    local tmp
+    tmp="$(mktemp -d /tmp/wakey-resvg.XXXXXX)"
+    if (cd "$tmp" && npm init -y >/dev/null 2>&1 && npm install @resvg/resvg-js --silent >/dev/null 2>&1); then
+      ICON_DIR="$ICON_DIR" NODE_PATH="$tmp/node_modules" node <<'NODE'
+const { Resvg } = require('@resvg/resvg-js');
+const fs = require('fs');
+const path = require('path');
+const dir = process.env.ICON_DIR;
+const size = 16;
+for (const name of ['egg','bacon','coffee','moon','thermo-low','thermo-half','thermo-high','clam','laptop']) {
+  const svgPath = path.join(dir, name + '.svg');
+  if (!fs.existsSync(svgPath)) continue;
+  const svg = fs.readFileSync(svgPath);
+  const svgStr = svg.toString().replace(/currentColor/g, 'black');
+  const png = new Resvg(Buffer.from(svgStr), {
+    fitTo: { mode: 'width', value: size },
+    background: 'rgba(0,0,0,0)'
+  }).render().asPng();
+  fs.writeFileSync(path.join(dir, name + '.png'), png);
+  // remove old dual-theme leftovers if present
+  for (const suffix of ['-light', '-dark', '-menu', '-black', '-white']) {
+    try { fs.unlinkSync(path.join(dir, name + suffix + '.png')); } catch {}
+  }
+}
+NODE
+      rendered=1
+    fi
+    rm -rf "$tmp"
+  fi
+
+  if [ "$rendered" != 1 ]; then
+    echo "  ⚠ node/resvg unavailable — icons may be missing (install Node for template icons)"
+  fi
   local n
   n="$(ls -1 "$ICON_DIR"/*.png 2>/dev/null | wc -l | tr -d ' ')"
-  echo "• Layered icons ready ($n PNGs in $ICON_DIR)"
+  echo "• Template icons ready ($n PNGs @16px, black+alpha)"
 }
-build_layered_icons
+build_mono_icons
 
 # 2) reconcile script (runs as ROOT via launchd — bake in this user's state path)
 TMP_RECONCILE="$STATE_DIR/wakeywakey-reconcile"
@@ -494,7 +453,7 @@ defaults write com.ameba.SwiftBar MakePluginExecutable -bool true
 echo "• SwiftBar plugin dir: $PLUGIN_DIR"
 echo "• SwiftBar launch-at-login: on"
 
-PLUGIN="$PLUGIN_DIR/wakeywakey.5s.sh"
+PLUGIN="$PLUGIN_DIR/wakeywakey.15s.sh"
 cat > "$PLUGIN" <<EOF
 #!/bin/bash
 # WakeyWakey — SwiftBar menu UI.
@@ -619,46 +578,42 @@ if [ "$would" = "1" ] && [ "$max_therm" != "off" ] && [ "$therm" -ge "$max_therm
   thermal_pause=1
 fi
 
-# Heat badge: Fair / Serious / Critical (none at Nominal)
-therm_icon() {
-  case "$1" in
-    1) printf '🌡️' ;;
-    2) printf '♨️' ;;
-    3) printf '🔥' ;;
-    *) printf '' ;;
-  esac
+# Template icons: black+alpha PNG via templateImage= (macOS tints like system menu icons)
+ICON_DIR="$STATE_DIR/icons-mono"
+icon_attr() {
+  local name="$1" f="$ICON_DIR/$1.png"
+  if [ -f "$f" ]; then
+    printf 'templateImage=%s' "$(base64 -i "$f" | tr -d '\n')"
+  fi
 }
-ICON_DIR="$STATE_DIR/icons"
+# Menu bar icon
 if [ "$thermal_pause" = "1" ]; then
-  # Heat disabled keep-awake — heat icon only
-  echo "$(therm_icon "$therm")"
+  case "$therm" in
+    1) _tb=$(icon_attr thermo-low) ;;
+    2) _tb=$(icon_attr thermo-half) ;;
+    3) _tb=$(icon_attr thermo-high) ;;
+    *) _tb=$(icon_attr thermo-high) ;;
+  esac
+  if [ -n "$_tb" ]; then echo "| $_tb"; else echo "🔥"; fi
 elif [ "$would" = "1" ] || [ "$cur" = "1" ]; then
   case "$mode" in
-    on)     wake_key="on";   base="☕️" ;;
-    ac)     wake_key="ac";   base="🥚" ;;
-    batt:*) wake_key="batt"; base="🥓" ;;
-    *)      wake_key="on";   base="☕️" ;;
+    on)     _tb=$(icon_attr coffee) ;;
+    ac)     _tb=$(icon_attr egg) ;;
+    batt:*) _tb=$(icon_attr bacon) ;;
+    *)      _tb=$(icon_attr coffee) ;;
   esac
-  if [ "$therm" -ge 1 ] 2>/dev/null; then
-    layered="$ICON_DIR/${wake_key}-${therm}.png"
-    if [ -f "$layered" ]; then
-      echo "| image=$(base64 -i "$layered" | tr -d '\n')"
-    else
-      echo "${base}$(therm_icon "$therm")"
-    fi
-  else
-    echo "$base"
-  fi
+  if [ -n "$_tb" ]; then echo "| $_tb"; else echo "🥚"; fi
 else
-  echo "💤"
+  _tb=$(icon_attr moon)
+  if [ -n "$_tb" ]; then echo "| $_tb"; else echo "💤"; fi
 fi
 echo "---"
-echo "WakeyWakey 🥚🥓☕️ | size=14 color=#e0902a"
+echo "WakeyWakey | size=14"
 echo "---"
 if [ "$thermal_pause" = "1" ]; then
-  echo "Status: PAUSED — Mac is hot | color=#ff3b30"
+  echo "Status: PAUSED — Mac is hot | color=#ff3b30 $(icon_attr thermo-high)"
 elif [ "$cur" = "1" ]; then
-  echo "Status: AWAKE — lid can be closed | color=#e0902a"
+  echo "Status: AWAKE — lid can be closed | color=#1b7f4a"
 else
   echo "Status: normal sleep | color=#8e8e93"
 fi
@@ -671,26 +626,27 @@ echo "Power: $([ "$on_ac" -eq 1 ] && echo 'AC' || echo 'Battery') · ${pct:-?} |
 echo "Mode: $mode · Thermal: $therm_name ($therm) · Clamshell: $clam_mode | color=#8e8e93 size=12"
 echo "Version: $local_ver | color=#8e8e93 size=12"
 echo "---"
-echo "Keep-awake mode | size=12 color=#e0902a"
-mark() { [ "$mode" = "$1" ] && printf '✓ ' || printf '     '; }
-echo "$(mark off)💤  Off (normal sleep) | bash='$SELF' param1=set param2=off terminal=false refresh=true"
-echo "$(mark ac)🥚  On — while plugged in only | bash='$SELF' param1=set param2=ac terminal=false refresh=true"
-echo "$(mark batt:50)🥓  On — while AC or battery ≥ 50% | bash='$SELF' param1=set param2=batt:50 terminal=false refresh=true"
-echo "$(mark on)☕️  On — always | bash='$SELF' param1=set param2=on terminal=false refresh=true"
+echo "Keep-awake mode | size=12"
+# No leading spaces on unchecked rows — SwiftBar can treat indented lines as dead submenus
+mark() { [ "$mode" = "$1" ] && printf '✓ ' || printf '• '; }
+echo "$(mark off)Off (normal sleep) | $(icon_attr moon) bash='$SELF' param1=set param2=off terminal=false refresh=true"
+echo "$(mark ac)On — while plugged in only | $(icon_attr egg) bash='$SELF' param1=set param2=ac terminal=false refresh=true"
+echo "$(mark batt:50)On — while AC or battery ≥ 50% | $(icon_attr bacon) bash='$SELF' param1=set param2=batt:50 terminal=false refresh=true"
+echo "$(mark on)On — always | $(icon_attr coffee) bash='$SELF' param1=set param2=on terminal=false refresh=true"
 echo "---"
-echo "Thermal pause threshold | size=12 color=#e0902a"
-mark_t() { [ "$max_therm" = "$1" ] && printf '✓ ' || printf '     '; }
-echo "$(mark_t 1)🌡️  Fair | bash='$SELF' param1=set-therm param2=1 terminal=false refresh=true"
-echo "$(mark_t 2)♨️  Serious (default) — may hit during heavy workloads | bash='$SELF' param1=set-therm param2=2 terminal=false refresh=true"
-echo "$(mark_t 3)🔥  Critical — for sustained high heat | bash='$SELF' param1=set-therm param2=3 terminal=false refresh=true"
+echo "Thermal pause threshold | size=12"
+mark_t() { [ "$max_therm" = "$1" ] && printf '✓ ' || printf '• '; }
+echo "$(mark_t 1)Fair | $(icon_attr thermo-low) bash='$SELF' param1=set-therm param2=1 terminal=false refresh=true"
+echo "$(mark_t 2)Serious (default) — may hit during heavy workloads | $(icon_attr thermo-half) bash='$SELF' param1=set-therm param2=2 terminal=false refresh=true"
+echo "$(mark_t 3)Critical — for sustained high heat | $(icon_attr thermo-high) bash='$SELF' param1=set-therm param2=3 terminal=false refresh=true"
 echo "---"
-echo "Clamshell (lid closed + display) | size=12 color=#e0902a"
-mark_c() { [ "$clam_mode" = "$1" ] && printf '✓ ' || printf '     '; }
-echo "$(mark_c on)🖥️  Enabled — leave displays on (external monitor OK) | bash='$SELF' param1=set-clamshell param2=on terminal=false refresh=true"
-echo "$(mark_c off)🌑  Disabled (default) — blank displays when lid closes | bash='$SELF' param1=set-clamshell param2=off terminal=false refresh=true"
+echo "Clamshell (lid closed + display) | size=12"
+mark_c() { [ "$clam_mode" = "$1" ] && printf '✓ ' || printf '• '; }
+echo "$(mark_c on)Enabled — leave displays on (external monitor OK) | $(icon_attr laptop) bash='$SELF' param1=set-clamshell param2=on terminal=false refresh=true"
+echo "$(mark_c off)Disabled (default) — blank displays when lid closes | $(icon_attr clam) bash='$SELF' param1=set-clamshell param2=off terminal=false refresh=true"
 echo "---"
 if [ -n "$remote_ver" ]; then
-  echo "⬆ Update WakeyWakey ($local_ver → $remote_ver) | bash='$SELF' param1=update terminal=true refresh=true color=#e0902a"
+  echo "⬆ Update WakeyWakey ($local_ver → $remote_ver) | bash='$SELF' param1=update terminal=true refresh=true"
 else
   echo "Check for update | bash='$SELF' param1=check-update terminal=false refresh=true"
 fi

@@ -64,6 +64,12 @@ If Apple thermal pressure reaches your threshold, keep-awake **pauses** (saved m
 
 Change the threshold in the menu. Your choice is stored in `~/.config/wakeywakey/max-thermal`.
 
+### Menu icons
+
+Monochrome icons from Iconify (egg-fried, bacon, coffee, thermometers, laptop, shell), rendered as black+alpha PNGs and shown with SwiftBar `templateImage=` so macOS tints them like other menu-bar icons (light on a dark bar, dark in a light menu).
+
+Requires **Node.js** at install time to rasterize via `@resvg/resvg-js`. Without Node, the menu still works but may fall back without custom icons.
+
 ### Clamshell
 
 When keep-awake is on and the lid closes:
