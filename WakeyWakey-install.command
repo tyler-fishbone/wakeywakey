@@ -122,7 +122,7 @@ uninstall() {
   run_sudo rm -f "$PLIST" "$RECONCILE_BIN" "$LOG"
   run_sudo pmset -a disablesleep 0 2>/dev/null || true
   cleanup_askpass
-  rm -f "$(plugin_dir)/wakeywakey.15s.sh"
+  rm -f "$(plugin_dir)/wakeywakey.5s.sh" "$(plugin_dir)/wakeywakey.15s.sh"
   rm -rf "$STATE_DIR"
   echo "✓ WakeyWakey removed; normal sleep restored."
   echo "  (SwiftBar itself was left installed — remove it from /Applications if you want.)"
@@ -656,6 +656,8 @@ EOF
 chmod +x "$PLUGIN"
 # Clear quarantine on the plugin too (SwiftBar may refuse otherwise)
 xattr -d com.apple.quarantine "$PLUGIN" 2>/dev/null || true
+# Drop legacy plugin name from early Slack installs so SwiftBar doesn't show two entries
+rm -f "$PLUGIN_DIR/wakeywakey.5s.sh"
 echo "• Plugin written: $PLUGIN"
 
 # 6) root daemon
