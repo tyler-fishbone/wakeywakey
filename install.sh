@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.2.0"
+WAKEY_VERSION="1.3.0"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -172,6 +172,14 @@ if [ ! -f "$STATE_DIR/max-thermal" ]; then
 else
   echo "• Thermal pause: $(tr -d '[:space:]' < "$STATE_DIR/max-thermal") (kept; change in the menu bar)"
 fi
+# Clamshell: on = leave displays alone when lid closed (external monitor OK)
+#            off = blank displays when lid closed (default; good for headless/backpack)
+if [ ! -f "$STATE_DIR/clamshell" ]; then
+  printf 'off' > "$STATE_DIR/clamshell"
+  echo "• Clamshell: off (blank displays when lid closed); change in the menu bar"
+else
+  echo "• Clamshell: $(tr -d '[:space:]' < "$STATE_DIR/clamshell") (kept; change in the menu bar)"
+fi
 printf '%s' "$WAKEY_VERSION" > "$STATE_DIR/version"
 printf '%s' "$WAKEY_REPO" > "$STATE_DIR/repo"
 printf '%s' "$WAKEY_BRANCH" > "$STATE_DIR/branch"
@@ -296,6 +304,7 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin:\$PATH"
 STATE_DIR="$STATE_DIR"
 STATE_FILE="$STATE_DIR/desired"
 THERM_FILE="$STATE_DIR/max-thermal"
+CLAM_FILE="$STATE_DIR/clamshell"
 EOF
 cat >> "$TMP_RECONCILE" <<'EOF'
 mode="off"
@@ -347,9 +356,15 @@ if [ "$cur" != "$want" ]; then
     && logger -t wakeywakey "mode=$mode ac=$on_ac pct=${pct}% therm=$therm max=$max_therm pause=$thermal_pause -> disablesleep $want (was $cur)"
 fi
 
-if [ "$want" = "1" ]; then
-  clamshell="$(ioreg -r -k AppleClamshellState 2>/dev/null | awk -F'= ' '/AppleClamshellState/{print $2; exit}' | tr -d ' ')"
-  if [ "$clamshell" = "Yes" ]; then
+# When clamshell=off (default), blank displays on lid-close. When on, leave displays alone
+# so an external monitor can keep working (classic clamshell).
+clam_mode="off"
+[ -r "$CLAM_FILE" ] && clam_mode="$(tr -d '[:space:]' < "$CLAM_FILE")"
+[ -z "$clam_mode" ] && clam_mode="off"
+
+if [ "$want" = "1" ] && [ "$clam_mode" != "on" ]; then
+  lid="$(ioreg -r -k AppleClamshellState 2>/dev/null | awk -F'= ' '/AppleClamshellState/{print $2; exit}' | tr -d ' ')"
+  if [ "$lid" = "Yes" ]; then
     pmset displaysleepnow 2>/dev/null
   fi
 fi
@@ -492,6 +507,7 @@ EOF
 cat >> "$PLUGIN" <<'EOF'
 STATE_FILE="$STATE_DIR/desired"
 THERM_FILE="$STATE_DIR/max-thermal"
+CLAM_FILE="$STATE_DIR/clamshell"
 VERSION_FILE="$STATE_DIR/version"
 SELF="$0"
 
@@ -508,6 +524,9 @@ if [ "${1:-}" = "set" ]; then
 fi
 if [ "${1:-}" = "set-therm" ]; then
   mkdir -p "$STATE_DIR"; printf '%s' "${2:-2}" > "$THERM_FILE"; exit 0
+fi
+if [ "${1:-}" = "set-clamshell" ]; then
+  mkdir -p "$STATE_DIR"; printf '%s' "${2:-off}" > "$CLAM_FILE"; exit 0
 fi
 # Quiet remote version check every 3 days (cached; never blocks menu on failure)
 maybe_check_update() {
@@ -564,6 +583,10 @@ pct="$(printf '%s\n' "$batt_raw" | grep -Eo '[0-9]+%' | head -1)"
 max_therm=2
 [ -r "$THERM_FILE" ] && max_therm="$(tr -d '[:space:]' < "$THERM_FILE")"
 [ -z "$max_therm" ] && max_therm=2
+
+clam_mode="off"
+[ -r "$CLAM_FILE" ] && clam_mode="$(tr -d '[:space:]' < "$CLAM_FILE")"
+[ -z "$clam_mode" ] && clam_mode="off"
 
 therm=0
 therm_raw="$(notifyutil -g com.apple.system.thermalpressurelevel 2>/dev/null || true)"
@@ -645,7 +668,7 @@ local_ver="?"
 remote_ver=""
 [ -r "$STATE_DIR/update-available" ] && remote_ver="$(tr -d '[:space:]' < "$STATE_DIR/update-available")"
 echo "Power: $([ "$on_ac" -eq 1 ] && echo 'AC' || echo 'Battery') · ${pct:-?} | color=#8e8e93 size=12"
-echo "Mode: $mode · Thermal: $therm_name ($therm) | color=#8e8e93 size=12"
+echo "Mode: $mode · Thermal: $therm_name ($therm) · Clamshell: $clam_mode | color=#8e8e93 size=12"
 echo "Version: $local_ver | color=#8e8e93 size=12"
 echo "---"
 echo "Keep-awake mode | size=12 color=#e0902a"
@@ -660,6 +683,11 @@ mark_t() { [ "$max_therm" = "$1" ] && printf '✓ ' || printf '     '; }
 echo "$(mark_t 1)🌡️  Fair | bash='$SELF' param1=set-therm param2=1 terminal=false refresh=true"
 echo "$(mark_t 2)♨️  Serious (default) — may hit during heavy workloads | bash='$SELF' param1=set-therm param2=2 terminal=false refresh=true"
 echo "$(mark_t 3)🔥  Critical — for sustained high heat | bash='$SELF' param1=set-therm param2=3 terminal=false refresh=true"
+echo "---"
+echo "Clamshell (lid closed + display) | size=12 color=#e0902a"
+mark_c() { [ "$clam_mode" = "$1" ] && printf '✓ ' || printf '     '; }
+echo "$(mark_c on)🖥️  Enabled — leave displays on (external monitor OK) | bash='$SELF' param1=set-clamshell param2=on terminal=false refresh=true"
+echo "$(mark_c off)🌑  Disabled (default) — blank displays when lid closes | bash='$SELF' param1=set-clamshell param2=off terminal=false refresh=true"
 echo "---"
 if [ -n "$remote_ver" ]; then
   echo "⬆ Update WakeyWakey ($local_ver → $remote_ver) | bash='$SELF' param1=update terminal=true refresh=true color=#e0902a"

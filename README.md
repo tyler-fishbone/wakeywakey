@@ -64,6 +64,15 @@ If Apple thermal pressure reaches your threshold, keep-awake **pauses** (saved m
 
 Change the threshold in the menu. Your choice is stored in `~/.config/wakeywakey/max-thermal`.
 
+### Clamshell
+
+When keep-awake is on and the lid closes:
+
+- **Disabled (default)** — blank all displays (`pmset displaysleepnow`). Good for headless / backpack.
+- **Enabled** — leave displays alone so an **external monitor** can keep working (classic clamshell).
+
+Stored in `~/.config/wakeywakey/clamshell` (`on` / `off`).
+
 ## Gatekeeper / “untrusted” installer
 
 Apple blocks unsigned downloads opened via Finder until you approve them.
