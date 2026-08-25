@@ -519,7 +519,7 @@ maybe_check_update() {
   if [ "$force" != "force" ] && [ $((now - last)) -lt "$interval" ]; then
     return 0
   fi
-  remote="$(curl -fsSL --max-time 2 "$WAKEY_RAW_BASE/VERSION" 2>/dev/null | tr -d '[:space:]')" || {
+  remote="$(curl -fsSL --max-time 2 "$WAKEY_RAW_BASE/version.txt" 2>/dev/null | tr -d '[:space:]')" || {
     printf '%s' "$now" > "$STATE_DIR/update-checked-at"
     return 0
   }

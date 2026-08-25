@@ -91,7 +91,7 @@ Re-running the installer is safe. It keeps your current mode and thermal thresho
 
 ## Updates
 
-The menu checks [VERSION](VERSION) on GitHub about every **3 days** (quiet, 2s timeout; failures are ignored).
+The menu checks [version.txt](version.txt) on GitHub about every **3 days** (quiet, 2s timeout; failures are ignored).
 
 - If a newer version exists → **⬆ Update WakeyWakey** (re-runs `install.sh` from this repo; may ask for your Mac password)
 - Otherwise → **Check for update** (checks now)
