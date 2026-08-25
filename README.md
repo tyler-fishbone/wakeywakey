@@ -89,6 +89,20 @@ Full notarization (no warnings for strangers double-clicking a downloaded app) r
 
 Re-running the installer is safe. It keeps your current mode and thermal threshold.
 
+## Updates
+
+The menu checks [VERSION](VERSION) on GitHub about every **3 days** (quiet, 2s timeout; failures are ignored).
+
+- If a newer version exists → **⬆ Update WakeyWakey** (re-runs `install.sh` from this repo; may ask for your Mac password)
+- Otherwise → **Check for update** (checks now)
+
+Override the repo (e.g. a fork):
+
+```bash
+echo 'youruser/wakeywakey' > ~/.config/wakeywakey/repo
+echo 'main' > ~/.config/wakeywakey/branch
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

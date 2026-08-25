@@ -15,6 +15,12 @@
 #
 set -euo pipefail
 
+# Released version + GitHub source (plugin checks this for updates)
+WAKEY_VERSION="1.2.0"
+WAKEY_REPO="zjdonhauser/wakeywakey"
+WAKEY_BRANCH="main"
+WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
+
 # Keep the Terminal window readable when launched by double-click.
 # Skip with: WAKEYWAKEY_NO_PAUSE=1 bash "WakeyWakey-install.command"
 PAUSE_AT_END=0
@@ -166,6 +172,10 @@ if [ ! -f "$STATE_DIR/max-thermal" ]; then
 else
   echo "• Thermal pause: $(tr -d '[:space:]' < "$STATE_DIR/max-thermal") (kept; change in the menu bar)"
 fi
+printf '%s' "$WAKEY_VERSION" > "$STATE_DIR/version"
+printf '%s' "$WAKEY_REPO" > "$STATE_DIR/repo"
+printf '%s' "$WAKEY_BRANCH" > "$STATE_DIR/branch"
+echo "• Version: $WAKEY_VERSION (updates from github.com/$WAKEY_REPO)"
 
 # 1b) layered menu-bar icons (wake + temp badge) — SwiftBar can't stack plain emoji
 ICON_DIR="$STATE_DIR/icons"
@@ -477,11 +487,21 @@ cat > "$PLUGIN" <<EOF
 # <bitbar.desc>Lid-closed keep-awake with power conditions. 🥚🥓☕️</bitbar.desc>
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:\$PATH"
 STATE_DIR="$STATE_DIR"
+WAKEY_RAW_BASE="$WAKEY_RAW_BASE"
 EOF
 cat >> "$PLUGIN" <<'EOF'
 STATE_FILE="$STATE_DIR/desired"
 THERM_FILE="$STATE_DIR/max-thermal"
+VERSION_FILE="$STATE_DIR/version"
 SELF="$0"
+
+# Allow override: echo 'otheruser/wakeywakey' > ~/.config/wakeywakey/repo
+if [ -r "$STATE_DIR/repo" ]; then
+  _repo="$(tr -d '[:space:]' < "$STATE_DIR/repo")"
+  _branch="main"
+  [ -r "$STATE_DIR/branch" ] && _branch="$(tr -d '[:space:]' < "$STATE_DIR/branch")"
+  [ -n "$_repo" ] && WAKEY_RAW_BASE="https://raw.githubusercontent.com/${_repo}/${_branch:-main}"
+fi
 
 if [ "${1:-}" = "set" ]; then
   mkdir -p "$STATE_DIR"; printf '%s' "${2:-off}" > "$STATE_FILE"; exit 0
@@ -489,6 +509,51 @@ fi
 if [ "${1:-}" = "set-therm" ]; then
   mkdir -p "$STATE_DIR"; printf '%s' "${2:-2}" > "$THERM_FILE"; exit 0
 fi
+# Quiet remote version check every 3 days (cached; never blocks menu on failure)
+maybe_check_update() {
+  local force="${1:-}" now last interval=259200 remote local_v newest
+  now="$(date +%s)"
+  last=0
+  [ -r "$STATE_DIR/update-checked-at" ] && last="$(tr -d '[:space:]' < "$STATE_DIR/update-checked-at")"
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  if [ "$force" != "force" ] && [ $((now - last)) -lt "$interval" ]; then
+    return 0
+  fi
+  remote="$(curl -fsSL --max-time 2 "$WAKEY_RAW_BASE/VERSION" 2>/dev/null | tr -d '[:space:]')" || {
+    printf '%s' "$now" > "$STATE_DIR/update-checked-at"
+    return 0
+  }
+  printf '%s' "$now" > "$STATE_DIR/update-checked-at"
+  [ -z "$remote" ] && return 0
+  local_v=""
+  [ -r "$VERSION_FILE" ] && local_v="$(tr -d '[:space:]' < "$VERSION_FILE")"
+  if [ -z "$local_v" ]; then
+    printf '%s' "$remote" > "$STATE_DIR/update-available"
+    return 0
+  fi
+  if [ "$remote" = "$local_v" ]; then
+    rm -f "$STATE_DIR/update-available"
+    return 0
+  fi
+  newest="$(printf '%s\n%s\n' "$local_v" "$remote" | sort -V | tail -1)"
+  if [ "$newest" = "$remote" ]; then
+    printf '%s' "$remote" > "$STATE_DIR/update-available"
+  else
+    rm -f "$STATE_DIR/update-available"
+  fi
+}
+
+if [ "${1:-}" = "update" ]; then
+  echo "Updating WakeyWakey from $WAKEY_RAW_BASE …"
+  curl -fsSL "$WAKEY_RAW_BASE/install.sh" | WAKEYWAKEY_NO_PAUSE=1 bash
+  exit 0
+fi
+if [ "${1:-}" = "check-update" ]; then
+  maybe_check_update force
+  exit 0
+fi
+
+maybe_check_update
 
 mode="off"; [ -r "$STATE_FILE" ] && mode="$(tr -d '[:space:]' < "$STATE_FILE")"; [ -z "$mode" ] && mode="off"
 cur="$(pmset -g 2>/dev/null | awk '/SleepDisabled/{print $2; exit}')"; [ -z "$cur" ] && cur=0
@@ -575,8 +640,13 @@ else
   echo "Status: normal sleep | color=#8e8e93"
 fi
 # Info-only rows (no bash=) — gray means “not a button”, not “menu locked”
+local_ver="?"
+[ -r "$VERSION_FILE" ] && local_ver="$(tr -d '[:space:]' < "$VERSION_FILE")"
+remote_ver=""
+[ -r "$STATE_DIR/update-available" ] && remote_ver="$(tr -d '[:space:]' < "$STATE_DIR/update-available")"
 echo "Power: $([ "$on_ac" -eq 1 ] && echo 'AC' || echo 'Battery') · ${pct:-?} | color=#8e8e93 size=12"
 echo "Mode: $mode · Thermal: $therm_name ($therm) | color=#8e8e93 size=12"
+echo "Version: $local_ver | color=#8e8e93 size=12"
 echo "---"
 echo "Keep-awake mode | size=12 color=#e0902a"
 mark() { [ "$mode" = "$1" ] && printf '✓ ' || printf '     '; }
@@ -591,6 +661,11 @@ echo "$(mark_t 1)🌡️  Fair | bash='$SELF' param1=set-therm param2=1 terminal
 echo "$(mark_t 2)♨️  Serious (default) — may hit during heavy workloads | bash='$SELF' param1=set-therm param2=2 terminal=false refresh=true"
 echo "$(mark_t 3)🔥  Critical — for sustained high heat | bash='$SELF' param1=set-therm param2=3 terminal=false refresh=true"
 echo "---"
+if [ -n "$remote_ver" ]; then
+  echo "⬆ Update WakeyWakey ($local_ver → $remote_ver) | bash='$SELF' param1=update terminal=true refresh=true color=#e0902a"
+else
+  echo "Check for update | bash='$SELF' param1=check-update terminal=false refresh=true"
+fi
 echo "View log | bash=/usr/bin/tail param1=-n param2=40 param3=/var/log/wakeywakey.log terminal=true"
 echo "Refresh | refresh=true"
 EOF
