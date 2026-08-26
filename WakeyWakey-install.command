@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.4"
+WAKEY_VERSION="1.4.5"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -685,13 +685,36 @@ tell application "System Events"
 end tell
 APPLESCRIPT
 
+# macOS (esp. Sequoia/Tahoe) can hide third-party menu bar apps until enabled in Settings.
+# We can't flip that toggle for the user — open the pane and ask them to enable SwiftBar.
+prompt_menubar_allow() {
+  echo ""
+  echo "──────────────────────────────────────────────"
+  echo "One manual step (macOS requirement):"
+  echo "  System Settings → Control Center / Menu Bar"
+  echo "  → Allow in the Menu Bar → turn ON SwiftBar"
+  echo "──────────────────────────────────────────────"
+  # Control Center settings hosts "Allow in the Menu Bar" on current macOS
+  open "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension" 2>/dev/null \
+    || open "x-apple.systempreferences:com.apple.preference.dock" 2>/dev/null \
+    || true
+  if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${WAKEYWAKEY_NO_PAUSE:-}" ]; then
+    echo ""
+    read -r -p "Press Return after SwiftBar is enabled in Settings (or skip)…" _
+  else
+    echo "  (enable SwiftBar there if the 🥚 icon is missing from the menu bar)"
+  fi
+}
+prompt_menubar_allow
+
 trap - EXIT
 
 echo ""
 echo "══════════════════════════════════════════════"
 echo "✓ WakeyWakey ready."
-echo "  Look for 💤 / 🥚 / 🥓 / ☕️ / 🔥 in the menu bar and pick a mode."
-echo "  Default is Off until you choose. 🔥 = paused because the Mac is hot."
+echo "  Look for 🥚 / 💤 / 🥓 / ☕️ in the menu bar and pick a mode."
+echo "  Default is Off until you choose. Hot = thermal pause."
+echo "  If the icon is missing: Settings → Allow in the Menu Bar → SwiftBar ON"
 echo "  Re-run this file any time — it is safe and keeps your mode."
 echo "  Uninstall:  bash \"$SCRIPT_PATH\" --uninstall"
 echo "══════════════════════════════════════════════"

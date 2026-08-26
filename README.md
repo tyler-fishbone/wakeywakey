@@ -18,6 +18,8 @@ Avoids the Gatekeeper “untrusted developer” double-click block:
 curl -fsSL https://raw.githubusercontent.com/zjdonhauser/wakeywakey/main/install.sh | bash
 ```
 
+After install, macOS may open **System Settings → Control Center / Menu Bar**. Under **Allow in the Menu Bar**, turn **SwiftBar** on if the 🥚 icon is missing (Apple doesn’t let installers flip that for you).
+
 ### Option B — clone, then run
 
 ```bash
