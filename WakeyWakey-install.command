@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.2"
+WAKEY_VERSION="1.4.3"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -202,7 +202,7 @@ build_mono_icons() {
     "bi:thermometer-half|thermo-half"
     "bi:thermometer-high|thermo-high"
     "mynaui:shell-solid|clam"
-    "la:laptop-solid|laptop"
+    "bi:laptop-fill|laptop"
   )
   local id name
   for item in "${items[@]}"; do
