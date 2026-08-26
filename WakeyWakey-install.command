@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.3"
+WAKEY_VERSION="1.4.4"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -586,27 +586,26 @@ icon_attr() {
     printf 'templateImage=%s' "$(base64 -i "$f" | tr -d '\n')"
   fi
 }
-# Menu bar icon
+# Menu bar: always include a visible emoji so a failed/invisible templateImage
+# does not leave a blank status item (common on dark menu bars).
 if [ "$thermal_pause" = "1" ]; then
   case "$therm" in
-    1) _tb=$(icon_attr thermo-low) ;;
-    2) _tb=$(icon_attr thermo-half) ;;
-    3) _tb=$(icon_attr thermo-high) ;;
-    *) _tb=$(icon_attr thermo-high) ;;
+    1) _tb=$(icon_attr thermo-low); _em="🌡️" ;;
+    2) _tb=$(icon_attr thermo-half); _em="♨️" ;;
+    3) _tb=$(icon_attr thermo-high); _em="🔥" ;;
+    *) _tb=$(icon_attr thermo-high); _em="🔥" ;;
   esac
-  if [ -n "$_tb" ]; then echo "| $_tb"; else echo "🔥"; fi
 elif [ "$would" = "1" ] || [ "$cur" = "1" ]; then
   case "$mode" in
-    on)     _tb=$(icon_attr coffee) ;;
-    ac)     _tb=$(icon_attr egg) ;;
-    batt:*) _tb=$(icon_attr bacon) ;;
-    *)      _tb=$(icon_attr coffee) ;;
+    on)     _tb=$(icon_attr coffee); _em="☕️" ;;
+    ac)     _tb=$(icon_attr egg); _em="🥚" ;;
+    batt:*) _tb=$(icon_attr bacon); _em="🥓" ;;
+    *)      _tb=$(icon_attr coffee); _em="☕️" ;;
   esac
-  if [ -n "$_tb" ]; then echo "| $_tb"; else echo "🥚"; fi
 else
-  _tb=$(icon_attr moon)
-  if [ -n "$_tb" ]; then echo "| $_tb"; else echo "💤"; fi
+  _tb=$(icon_attr moon); _em="💤"
 fi
+if [ -n "$_tb" ]; then echo "${_em}| $_tb"; else echo "$_em"; fi
 echo "---"
 echo "WakeyWakey | size=14"
 echo "---"
