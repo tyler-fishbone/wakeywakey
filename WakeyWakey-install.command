@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.5"
+WAKEY_VERSION="1.4.6"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -685,16 +685,83 @@ tell application "System Events"
 end tell
 APPLESCRIPT
 
-# macOS (esp. Sequoia/Tahoe) can hide third-party menu bar apps until enabled in Settings.
-# We can't flip that toggle for the user — open the pane and ask them to enable SwiftBar.
+# macOS can hide third-party menu bar apps until enabled under
+# System Settings → Control Center / Menu Bar → Allow in the Menu Bar.
+# We can't flip that toggle; we can detect it and only prompt when needed.
+swiftbar_menubar_allowed() {
+  # Prints: allowed | denied | unknown
+  python3 - <<'PY' 2>/dev/null || { echo unknown; exit 0; }
+import os, pathlib, plistlib, sys
+bundle = "com.ameba.SwiftBar"
+candidates = [
+    pathlib.Path.home() / "Library/Group Containers/group.com.apple.controlcenter/Library/Preferences/group.com.apple.controlcenter.plist",
+    pathlib.Path.home() / "Library/GroupContainersAlias/group.com.apple.controlcenter/Library/Preferences/group.com.apple.controlcenter.plist",
+]
+pref = next((p for p in candidates if p.is_file()), None)
+if pref is None:
+    print("unknown")
+    raise SystemExit(0)
+try:
+    with pref.open("rb") as f:
+        data = plistlib.load(f)
+    blob = data.get("trackedApplications")
+    if not blob:
+        print("unknown")
+        raise SystemExit(0)
+    tracked = plistlib.loads(blob)
+except Exception:
+    print("unknown")
+    raise SystemExit(0)
+
+# Entries pair a bare bundle record with a details record containing isAllowed
+allowed = None
+for item in tracked if isinstance(tracked, list) else []:
+    if not isinstance(item, dict) or "isAllowed" not in item:
+        continue
+    loc = item.get("location") or {}
+    b = loc.get("bundle") if isinstance(loc, dict) else None
+    bid = None
+    if isinstance(b, dict):
+        bid = b.get("_0") or b.get("bundleIdentifier")
+    elif isinstance(b, str):
+        bid = b
+    if bid == bundle:
+        allowed = bool(item.get("isAllowed"))
+        break
+
+if allowed is True:
+    print("allowed")
+elif allowed is False:
+    print("denied")
+else:
+    # Not listed yet — common before first run; treat as needs attention
+    print("unknown")
+PY
+}
+
 prompt_menubar_allow() {
+  # Give Control Center a moment to register SwiftBar after first launch
+  sleep 2
+  local status
+  status="$(swiftbar_menubar_allowed)"
+  case "$status" in
+    allowed)
+      echo "• Menu Bar: SwiftBar already allowed"
+      return 0
+      ;;
+    denied)
+      echo "• Menu Bar: SwiftBar is turned off in Settings — prompting…"
+      ;;
+    *)
+      echo "• Menu Bar: couldn't confirm SwiftBar is allowed — prompting…"
+      ;;
+  esac
   echo ""
   echo "──────────────────────────────────────────────"
   echo "One manual step (macOS requirement):"
   echo "  System Settings → Control Center / Menu Bar"
   echo "  → Allow in the Menu Bar → turn ON SwiftBar"
   echo "──────────────────────────────────────────────"
-  # Control Center settings hosts "Allow in the Menu Bar" on current macOS
   open "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension" 2>/dev/null \
     || open "x-apple.systempreferences:com.apple.preference.dock" 2>/dev/null \
     || true
