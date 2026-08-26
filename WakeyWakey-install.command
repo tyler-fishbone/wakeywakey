@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.0"
+WAKEY_VERSION="1.4.1"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -642,8 +642,8 @@ echo "$(mark_t 3)Critical — for sustained high heat | $(icon_attr thermo-high)
 echo "---"
 echo "Clamshell (lid closed + display) | size=12"
 mark_c() { [ "$clam_mode" = "$1" ] && printf '✓ ' || printf '• '; }
-echo "$(mark_c on)Enabled — leave displays on (external monitor OK) | $(icon_attr laptop) bash='$SELF' param1=set-clamshell param2=on terminal=false refresh=true"
-echo "$(mark_c off)Disabled (default) — blank displays when lid closes | $(icon_attr clam) bash='$SELF' param1=set-clamshell param2=off terminal=false refresh=true"
+echo "$(mark_c on)Enabled — leave displays on (external monitor OK) | $(icon_attr clam) bash='$SELF' param1=set-clamshell param2=on terminal=false refresh=true"
+echo "$(mark_c off)Disabled (default) — blank displays when lid closes | $(icon_attr laptop) bash='$SELF' param1=set-clamshell param2=off terminal=false refresh=true"
 echo "---"
 if [ -n "$remote_ver" ]; then
   echo "⬆ Update WakeyWakey ($local_ver → $remote_ver) | bash='$SELF' param1=update terminal=true refresh=true"
