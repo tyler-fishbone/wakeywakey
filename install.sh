@@ -689,9 +689,9 @@ APPLESCRIPT
 # System Settings → Control Center / Menu Bar → Allow in the Menu Bar.
 # We can't flip that toggle; we can detect it and only prompt when needed.
 swiftbar_menubar_allowed() {
-  # Prints: allowed | denied | unknown
-  python3 - <<'PY' 2>/dev/null || { echo unknown; exit 0; }
-import os, pathlib, plistlib, sys
+  # Prints: allowed | denied | unknown  (never exits the installer)
+  python3 - <<'PY' 2>/dev/null || echo unknown
+import pathlib, plistlib
 bundle = "com.ameba.SwiftBar"
 candidates = [
     pathlib.Path.home() / "Library/Group Containers/group.com.apple.controlcenter/Library/Preferences/group.com.apple.controlcenter.plist",
@@ -713,7 +713,6 @@ except Exception:
     print("unknown")
     raise SystemExit(0)
 
-# Entries pair a bare bundle record with a details record containing isAllowed
 allowed = None
 for item in tracked if isinstance(tracked, list) else []:
     if not isinstance(item, dict) or "isAllowed" not in item:
