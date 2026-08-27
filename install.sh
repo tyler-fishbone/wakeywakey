@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.6"
+WAKEY_VERSION="1.4.7"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -586,8 +586,8 @@ icon_attr() {
     printf 'templateImage=%s' "$(base64 -i "$f" | tr -d '\n')"
   fi
 }
-# Menu bar: always include a visible emoji so a failed/invisible templateImage
-# does not leave a blank status item (common on dark menu bars).
+# Menu bar: templateImage only when the PNG exists (macOS tints it).
+# Emoji fallback only if the template is missing — never both (that showed two eggs).
 if [ "$thermal_pause" = "1" ]; then
   case "$therm" in
     1) _tb=$(icon_attr thermo-low); _em="🌡️" ;;
@@ -605,7 +605,7 @@ elif [ "$would" = "1" ] || [ "$cur" = "1" ]; then
 else
   _tb=$(icon_attr moon); _em="💤"
 fi
-if [ -n "$_tb" ]; then echo "${_em}| $_tb"; else echo "$_em"; fi
+if [ -n "$_tb" ]; then echo "| $_tb"; else echo "$_em"; fi
 echo "---"
 echo "WakeyWakey | size=14"
 echo "---"
