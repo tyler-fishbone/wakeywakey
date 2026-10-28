@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Released version + GitHub source (plugin checks this for updates)
-WAKEY_VERSION="1.4.7"
+WAKEY_VERSION="1.4.8"
 WAKEY_REPO="zjdonhauser/wakeywakey"
 WAKEY_BRANCH="main"
 WAKEY_RAW_BASE="https://raw.githubusercontent.com/${WAKEY_REPO}/${WAKEY_BRANCH}"
@@ -208,7 +208,7 @@ build_mono_icons() {
   for item in "${items[@]}"; do
     id="${item%%|*}"
     name="${item##*|}"
-    curl -fsSL "https://api.iconify.design/${id}.svg?height=64&color=black" -o "$ICON_DIR/${name}.svg" || true
+    curl -fsSL "https://api.iconify.design/${id%%:*}/${id#*:}.svg?height=64&color=black" -o "$ICON_DIR/${name}.svg" || true
   done
 
   local rendered=0
